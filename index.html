@@ -1,0 +1,1773 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEIC to JPG Fast Batch Converter — แปลงไฟล์ HEIC เป็น JPG ทีละหลายไฟล์</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic-to@1.6.7/dist/iife/heic-to.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root {
+      font-family: "Inter", "Noto Sans Thai", "Sarabun", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .drop-active {
+      border-color: #2563eb !important;
+      background-color: #eff6ff !important;
+      transform: scale(1.005);
+    }
+    .fade-in {
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    input[type="range"] {
+      accent-color: #2563eb;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Full-page drag overlay -->
+  <div id="globalDropOverlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-blue-600/15 backdrop-blur-sm border-4 border-dashed border-blue-500 m-3 rounded-3xl pointer-events-none">
+    <div class="bg-white/95 shadow-2xl rounded-2xl px-8 py-6 text-center border border-blue-100">
+      <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-blue-600 text-white flex items-center justify-center">
+        <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+      </div>
+      <p class="text-lg font-bold text-slate-900">ปล่อยไฟล์ HEIC ตรงนี้ได้เลย</p>
+      <p class="text-sm text-slate-500 mt-1">รองรับการลากวางทีละหลายไฟล์หรือทั้งโฟลเดอร์</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200/80">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
+          <i data-lucide="zap" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-bold text-slate-900 truncate leading-tight">HEIC → JPG Fast Batch</h1>
+          <p class="text-xs text-slate-500 truncate">แปลงรูป iPhone ทีละหลายไฟล์รวดเร็วในเครื่อง</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-full">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          ประมวลผลในเครื่อง 100% ไม่อัปโหลดไฟล์
+        </span>
+        <span id="engineBadge" class="inline-flex items-center gap-1 text-xs font-medium text-slate-600 bg-slate-100 px-2.5 py-1.5 rounded-full">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          พร้อมใช้งาน
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-5">
+
+    <!-- Top Workspace: Dropzone + Settings -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+
+      <!-- Dropzone Card -->
+      <section class="lg:col-span-7 flex flex-col">
+        <div id="dropZone"
+             role="button"
+             tabindex="0"
+             aria-label="พื้นที่เลือกหรือลากวางไฟล์ HEIC"
+             class="flex-1 min-h-[240px] bg-white border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/30 rounded-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer shadow-sm">
+          <div class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 border border-blue-100">
+            <i data-lucide="images" class="w-8 h-8"></i>
+          </div>
+          <h2 class="text-lg sm:text-xl font-bold text-slate-900">ลากไฟล์ HEIC มาวางที่นี่ หรือกดเลือกไฟล์</h2>
+          <p class="text-sm text-slate-500 mt-1.5 max-w-md">
+            รองรับไฟล์ <span class="font-semibold text-slate-700">.HEIC, .HEIF</span> จาก iPhone/iPad (รวมถึง iOS รุ่นใหม่) เลือกได้ทีละหลายสิบไฟล์พร้อมกัน
+          </p>
+
+          <div class="flex flex-wrap items-center justify-center gap-2.5 mt-5">
+            <button id="selectFilesBtn" type="button"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-sm font-semibold shadow-sm transition">
+              <i data-lucide="file-plus" class="w-4 h-4"></i>
+              เลือกหลายไฟล์
+            </button>
+            <button id="selectFolderBtn" type="button"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-sm font-semibold transition">
+              <i data-lucide="folder-open" class="w-4 h-4"></i>
+              เลือกทั้งโฟลเดอร์
+            </button>
+            <button id="openDriveModalBtn" type="button"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 text-sm font-semibold transition">
+              <i data-lucide="hard-drive" class="w-4 h-4"></i>
+              เพิ่มจาก Google Drive
+            </button>
+          </div>
+
+          <p class="text-xs text-slate-400 mt-4 flex items-center gap-1.5">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            ไฟล์ทั้งหมดถูกแปลงในเบราว์เซอร์ของคุณเท่านั้น ไม่ส่งออกอินเทอร์เน็ต
+          </p>
+
+          <input id="fileInput" type="file" multiple accept=".heic,.heif,image/heic,image/heif,image/*" class="hidden" />
+          <input id="folderInput" type="file" webkitdirectory directory multiple class="hidden" />
+        </div>
+      </section>
+
+      <!-- Settings Panel -->
+      <section class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 flex flex-col justify-between gap-4">
+        <div class="space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <i data-lucide="sliders-horizontal" class="w-4 h-4 text-blue-600"></i>
+              ตั้งค่าการแปลงไฟล์
+            </h3>
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input id="autoConvertToggle" type="checkbox" checked class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+              <span class="text-xs font-medium text-slate-600">แปลงทันทีที่วางไฟล์</span>
+            </label>
+          </div>
+
+          <!-- Output Format + Concurrency -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="formatSelect" class="block text-xs font-semibold text-slate-600 mb-1.5">ไฟล์ปลายทาง</label>
+              <select id="formatSelect" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                <option value="image/jpeg" selected>JPG (แนะนำ/เร็ว)</option>
+                <option value="image/webp">WebP (ไฟล์เล็ก)</option>
+                <option value="image/png">PNG (ไม่บีบอัด)</option>
+              </select>
+            </div>
+            <div>
+              <label for="concurrencySelect" class="block text-xs font-semibold text-slate-600 mb-1.5">ความเร็ว (แปลงพร้อมกัน)</label>
+              <select id="concurrencySelect" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                <option value="2">2 ไฟล์พร้อมกัน</option>
+                <option value="3" selected>3 ไฟล์พร้อมกัน (แนะนำ)</option>
+                <option value="4">4 ไฟล์พร้อมกัน (เร็วสุด)</option>
+                <option value="1">1 ไฟล์ (ประหยัดแรม)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Quality Slider -->
+          <div id="qualityGroup">
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="qualitySlider" class="text-xs font-semibold text-slate-600">คุณภาพรูปภาพ</label>
+              <span id="qualityValue" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">90%</span>
+            </div>
+            <input id="qualitySlider" type="range" min="50" max="100" step="1" value="90" class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer" />
+            <div class="flex items-center justify-between gap-1.5 mt-2">
+              <button type="button" data-quality="75" class="quality-preset flex-1 text-xs py-1 rounded-lg border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 font-medium transition">ไฟล์เล็ก 75%</button>
+              <button type="button" data-quality="90" class="quality-preset flex-1 text-xs py-1 rounded-lg border border-blue-500 bg-blue-50 text-blue-700 font-semibold transition">สมดุล 90%</button>
+              <button type="button" data-quality="98" class="quality-preset flex-1 text-xs py-1 rounded-lg border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 font-medium transition">คมชัด 98%</button>
+            </div>
+          </div>
+
+          <!-- Resize + Filename Prefix -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="resizeSelect" class="block text-xs font-semibold text-slate-600 mb-1.5">ย่อขนาดรูป (ด้านยาวสุด)</label>
+              <select id="resizeSelect" class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 focus:bg-white focus:border-blue-500 focus:outline-none">
+                <option value="0" selected>ขนาดต้นฉบับ (เร็วสุด)</option>
+                <option value="2560">ไม่เกิน 2560 px</option>
+                <option value="1920">Full HD (1920 px)</option>
+                <option value="1280">ส่ง LINE/เว็บ (1280 px)</option>
+              </select>
+            </div>
+            <div>
+              <label for="prefixInput" class="block text-xs font-semibold text-slate-600 mb-1.5">คำนำหน้าชื่อไฟล์ (ถ้ามี)</label>
+              <input id="prefixInput" type="text" placeholder="เช่น trip_" maxlength="32"
+                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Primary Action Bar inside Settings -->
+        <div class="pt-3 border-t border-slate-100 flex items-center gap-2">
+          <button id="convertAllBtn" type="button" disabled
+                  class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-sm font-semibold transition">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            แปลงไฟล์ที่รออยู่
+          </button>
+          <button id="downloadZipBtn" type="button" disabled
+                  class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-sm font-semibold transition">
+            <i data-lucide="archive" class="w-4 h-4"></i>
+            โหลดทั้งหมด (.ZIP)
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Batch Progress & Stats Strip -->
+    <section id="statsBar" class="hidden bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-5 space-y-3 fade-in">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-500">ทั้งหมด:</span>
+            <span id="statTotal" class="font-bold text-slate-900">0</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-slate-500">สำเร็จ:</span>
+            <span id="statDone" class="font-bold text-emerald-700">0</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-slate-500">กำลังแปลง:</span>
+            <span id="statProcessing" class="font-bold text-blue-700">0</span>
+          </div>
+          <div id="statErrorWrap" class="hidden items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            <span class="text-slate-500">ผิดพลาด:</span>
+            <span id="statError" class="font-bold text-rose-600">0</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+            <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+            <span id="statSizeSummary">0 KB</span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="downloadIndivBtn" type="button" disabled
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-slate-700 transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            โหลดแยกทีละไฟล์
+          </button>
+          <button id="reconvertBtn" type="button" disabled
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-slate-700 transition">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            แปลงใหม่ตามค่าล่าสุด
+          </button>
+          <button id="clearAllBtn" type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-semibold transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            ล้างทั้งหมด
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="space-y-1">
+        <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+          <div id="overallProgressBar" class="h-full bg-gradient-to-r from-blue-600 to-emerald-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="flex items-center justify-between text-xs text-slate-500">
+          <span id="progressStatusText">พร้อมแปลงไฟล์</span>
+          <span id="progressPercentText" class="font-semibold text-slate-700">0%</span>
+        </div>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <div class="inline-flex items-center bg-slate-100 p-1 rounded-xl gap-1" role="tablist">
+          <button type="button" data-filter="all" class="filter-tab px-3 py-1 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm transition">ทั้งหมด</button>
+          <button type="button" data-filter="done" class="filter-tab px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition">สำเร็จ</button>
+          <button type="button" data-filter="pending" class="filter-tab px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition">รอคิว/กำลังแปลง</button>
+          <button type="button" data-filter="error" class="filter-tab px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition">ผิดพลาด</button>
+        </div>
+        <div class="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+          <button id="viewGridBtn" type="button" title="มุมมองการ์ด" class="p-1.5 rounded-lg bg-white text-blue-600 shadow-sm transition">
+            <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+          </button>
+          <button id="viewListBtn" type="button" title="มุมมองรายการ" class="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 transition">
+            <i data-lucide="list" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- File Queue Container -->
+    <section id="fileListSection" class="hidden">
+      <div id="fileGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
+      <div id="emptyFilterState" class="hidden bg-white rounded-2xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+        ไม่มีไฟล์ในหมวดหมู่นี้
+      </div>
+    </section>
+
+    <!-- Empty-State Quick Guide (shown when no files added yet) -->
+    <section id="emptyGuide" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl border border-slate-200/80 p-4 flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-slate-800">แปลงพร้อมกันทีละหลายไฟล์</h4>
+          <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">ประมวลผลแบบขนาน 2–4 ไฟล์พร้อมกัน ไม่ต้องรอทีละรูป และเลือกทั้งโฟลเดอร์ได้ทันที</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200/80 p-4 flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+          <i data-lucide="archive" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-slate-800">รวมเป็น ZIP โหลดทีเดียวจบ</h4>
+          <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">แปลงเสร็จแล้วกดปุ่มเดียวได้ไฟล์ .zip รวมทุกรูป หรือจะกดโหลดเฉพาะรูปที่ต้องการก็ได้</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-200/80 p-4 flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+          <i data-lucide="shield-check" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-slate-800">ปลอดภัย ไม่อัปโหลดขึ้นเว็บ</h4>
+          <p class="text-xs text-slate-500 mt-0.5 leading-relaxed">ทำงานในเบราว์เซอร์ของคุณทั้งหมด รวดเร็วไม่ต้องเสียเวลาอัปโหลดและรักษาความเป็นส่วนตัวของรูปภาพ</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Image Preview Lightbox Modal -->
+  <div id="previewModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p id="previewTitle" class="text-sm font-bold text-slate-900 truncate"></p>
+          <p id="previewMeta" class="text-xs text-slate-500 truncate"></p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="previewDownloadBtn" type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            ดาวน์โหลด
+          </button>
+          <button id="closePreviewBtn" type="button" aria-label="ปิดหน้าต่างดูรูป"
+                  class="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 bg-slate-900 flex items-center justify-center overflow-auto p-4">
+        <img id="previewImg" src="" alt="ตัวอย่างรูปที่แปลงแล้ว" class="max-w-full max-h-[72vh] object-contain rounded-lg shadow-lg" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Drive Import Modal -->
+  <div id="driveModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200 fade-in">
+      <!-- Modal Header -->
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0">
+            <i data-lucide="hard-drive" class="w-5 h-5"></i>
+          </div>
+          <div class="min-w-0">
+            <h3 class="text-base font-bold text-slate-900 truncate">นำเข้าไฟล์จาก Google Drive</h3>
+            <p class="text-xs text-slate-500 truncate">ดึงไฟล์ HEIC/HEIF จากลิงก์แชร์ โฟลเดอร์ หรือบัญชี Drive ของคุณ</p>
+          </div>
+        </div>
+        <button id="closeDriveModalBtn" type="button" aria-label="ปิดหน้าต่าง Google Drive"
+                class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Tabs -->
+      <div class="px-5 pt-4">
+        <div class="grid grid-cols-2 bg-slate-100 p-1 rounded-xl gap-1" role="tablist">
+          <button type="button" id="driveTabLinksBtn" data-drive-tab="links"
+                  class="drive-tab-btn py-2 px-3 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm transition flex items-center justify-center gap-1.5">
+            <i data-lucide="link" class="w-3.5 h-3.5"></i>
+            วางลิงก์ไฟล์ / โฟลเดอร์
+          </button>
+          <button type="button" id="driveTabPickerBtn" data-drive-tab="picker"
+                  class="drive-tab-btn py-2 px-3 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5">
+            <i data-lucide="folder-search" class="w-3.5 h-3.5"></i>
+            เลือกจากบัญชี Drive
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-4">
+        <!-- Tab 1: Paste Links -->
+        <div id="driveTabLinks" class="space-y-3.5">
+          <div>
+            <label for="driveLinksInput" class="block text-xs font-semibold text-slate-700 mb-1.5">
+              วางลิงก์ไฟล์ หรือลิงก์โฟลเดอร์ Google Drive (บรรทัดละ 1 ลิงก์)
+            </label>
+            <textarea id="driveLinksInput" rows="4"
+                      placeholder="https://drive.google.com/file/d/1ABC.../view&#10;https://drive.google.com/drive/folders/1XYZ..."
+                      class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 focus:outline-none"></textarea>
+            <p class="text-[11px] text-slate-500 mt-1">
+              ไฟล์หรือโฟลเดอร์ต้องตั้งค่าแชร์เป็น <span class="font-semibold text-slate-700">"ทุกคนที่มีลิงก์ (ผู้มีสิทธิ์อ่าน)"</span>
+            </p>
+          </div>
+
+          <div>
+            <label for="driveApiKeyInput" class="block text-xs font-semibold text-slate-700 mb-1.5">
+              Google Drive API Key <span class="text-slate-400 font-normal">(บันทึกอัตโนมัติในเบราว์เซอร์)</span>
+            </label>
+            <input id="driveApiKeyInput" type="password" autocomplete="off" placeholder="AIzaSy..."
+                   class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-emerald-500 focus:outline-none" />
+          </div>
+
+          <button id="driveFetchLinksBtn" type="button"
+                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold transition">
+            <i data-lucide="cloud-download" class="w-4 h-4"></i>
+            ดึงไฟล์จากลิงก์เข้าคิวแปลง
+          </button>
+        </div>
+
+        <!-- Tab 2: Google Picker (OAuth) -->
+        <div id="driveTabPicker" class="hidden space-y-3.5">
+          <div class="rounded-xl bg-blue-50/80 border border-blue-200/80 p-3 text-xs text-blue-900 leading-relaxed">
+            ใช้สำหรับเลือกไฟล์ส่วนตัวใน Google Drive ของคุณโดยตรง (ไม่ต้องเปิดแชร์สาธารณะ) แนะนำให้เปิดไฟล์ HTML นี้ผ่านโดเมนของคุณ เช่น GitHub Pages เพื่อล็อกอินบัญชี Google ได้สมบูรณ์
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label for="driveClientIdInput" class="block text-xs font-semibold text-slate-700 mb-1.5">OAuth Client ID</label>
+              <input id="driveClientIdInput" type="text" autocomplete="off" placeholder="123456...apps.googleusercontent.com"
+                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:outline-none" />
+            </div>
+            <div>
+              <label for="drivePickerApiKeyInput" class="block text-xs font-semibold text-slate-700 mb-1.5">Google API Key</label>
+              <input id="drivePickerApiKeyInput" type="password" autocomplete="off" placeholder="AIzaSy..."
+                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <button id="driveOpenPickerBtn" type="button"
+                  class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-sm font-semibold transition">
+            <i data-lucide="folder-search" class="w-4 h-4"></i>
+            เชื่อมต่อและเปิดหน้าต่างเลือกไฟล์ Google Drive
+          </button>
+        </div>
+
+        <!-- Fetch Progress / Status -->
+        <div id="driveStatusBox" class="hidden rounded-xl border p-3 text-xs space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span id="driveStatusText" class="font-semibold"></span>
+            <span id="driveStatusCount" class="font-mono text-[11px]"></span>
+          </div>
+          <div id="driveProgressWrap" class="hidden w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div id="driveProgressBar" class="h-full bg-emerald-600 rounded-full transition-all duration-200" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Collapsible Setup Guide -->
+        <details class="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-xs text-slate-600">
+          <summary class="cursor-pointer font-semibold text-slate-700 select-none">วิธีสร้าง API Key / Client ID ใน Google Cloud (ทำครั้งเดียว)</summary>
+          <ol class="list-decimal list-inside space-y-1 mt-2 leading-relaxed text-[11px]">
+            <li>เข้า Google Cloud Console แล้วเปิดใช้งาน <strong>Google Drive API</strong> (และ <strong>Google Picker API</strong> หากใช้แบบเลือกจากบัญชี)</li>
+            <li>ไปที่เมนู Credentials → สร้าง <strong>API Key</strong> เพื่อนำมาใช้ดึงไฟล์/โฟลเดอร์จากลิงก์แชร์</li>
+            <li>หากต้องการเลือกไฟล์ส่วนตัวโดยไม่เปิดแชร์ ให้สร้าง <strong>OAuth 2.0 Client ID (Web application)</strong> และเพิ่ม URL เว็บของคุณใน Authorized JavaScript origins</li>
+          </ol>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // --- State ---
+      const state = {
+        items: [], // { id, file, name, originalSize, status: 'pending'|'converting'|'done'|'error', outputBlob, outputUrl, outputName, outputSize, width, height, durationMs, errorMsg, engineUsed }
+        filter: 'all',
+        viewMode: 'grid', // 'grid' | 'list'
+        isRunning: false,
+        isZipping: false,
+        previewItemId: null,
+        nextId: 1
+      };
+
+      // --- DOM Refs ---
+      const els = {
+        dropZone: document.getElementById('dropZone'),
+        globalDropOverlay: document.getElementById('globalDropOverlay'),
+        fileInput: document.getElementById('fileInput'),
+        folderInput: document.getElementById('folderInput'),
+        selectFilesBtn: document.getElementById('selectFilesBtn'),
+        selectFolderBtn: document.getElementById('selectFolderBtn'),
+        autoConvertToggle: document.getElementById('autoConvertToggle'),
+        formatSelect: document.getElementById('formatSelect'),
+        concurrencySelect: document.getElementById('concurrencySelect'),
+        qualityGroup: document.getElementById('qualityGroup'),
+        qualitySlider: document.getElementById('qualitySlider'),
+        qualityValue: document.getElementById('qualityValue'),
+        resizeSelect: document.getElementById('resizeSelect'),
+        prefixInput: document.getElementById('prefixInput'),
+        convertAllBtn: document.getElementById('convertAllBtn'),
+        downloadZipBtn: document.getElementById('downloadZipBtn'),
+        downloadIndivBtn: document.getElementById('downloadIndivBtn'),
+        reconvertBtn: document.getElementById('reconvertBtn'),
+        clearAllBtn: document.getElementById('clearAllBtn'),
+        statsBar: document.getElementById('statsBar'),
+        statTotal: document.getElementById('statTotal'),
+        statDone: document.getElementById('statDone'),
+        statProcessing: document.getElementById('statProcessing'),
+        statErrorWrap: document.getElementById('statErrorWrap'),
+        statError: document.getElementById('statError'),
+        statSizeSummary: document.getElementById('statSizeSummary'),
+        overallProgressBar: document.getElementById('overallProgressBar'),
+        progressStatusText: document.getElementById('progressStatusText'),
+        progressPercentText: document.getElementById('progressPercentText'),
+        fileListSection: document.getElementById('fileListSection'),
+        fileGrid: document.getElementById('fileGrid'),
+        emptyFilterState: document.getElementById('emptyFilterState'),
+        emptyGuide: document.getElementById('emptyGuide'),
+        viewGridBtn: document.getElementById('viewGridBtn'),
+        viewListBtn: document.getElementById('viewListBtn'),
+        previewModal: document.getElementById('previewModal'),
+        previewImg: document.getElementById('previewImg'),
+        previewTitle: document.getElementById('previewTitle'),
+        previewMeta: document.getElementById('previewMeta'),
+        previewDownloadBtn: document.getElementById('previewDownloadBtn'),
+        closePreviewBtn: document.getElementById('closePreviewBtn'),
+        toastContainer: document.getElementById('toastContainer'),
+        engineBadge: document.getElementById('engineBadge'),
+        openDriveModalBtn: document.getElementById('openDriveModalBtn'),
+        driveModal: document.getElementById('driveModal'),
+        closeDriveModalBtn: document.getElementById('closeDriveModalBtn'),
+        driveTabLinksBtn: document.getElementById('driveTabLinksBtn'),
+        driveTabPickerBtn: document.getElementById('driveTabPickerBtn'),
+        driveTabLinks: document.getElementById('driveTabLinks'),
+        driveTabPicker: document.getElementById('driveTabPicker'),
+        driveLinksInput: document.getElementById('driveLinksInput'),
+        driveApiKeyInput: document.getElementById('driveApiKeyInput'),
+        driveFetchLinksBtn: document.getElementById('driveFetchLinksBtn'),
+        driveClientIdInput: document.getElementById('driveClientIdInput'),
+        drivePickerApiKeyInput: document.getElementById('drivePickerApiKeyInput'),
+        driveOpenPickerBtn: document.getElementById('driveOpenPickerBtn'),
+        driveStatusBox: document.getElementById('driveStatusBox'),
+        driveStatusText: document.getElementById('driveStatusText'),
+        driveStatusCount: document.getElementById('driveStatusCount'),
+        driveProgressWrap: document.getElementById('driveProgressWrap'),
+        driveProgressBar: document.getElementById('driveProgressBar')
+      };
+
+      // --- Utilities ---
+      function formatBytes(bytes) {
+        if (!bytes || bytes <= 0 || Number.isNaN(bytes)) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const val = bytes / Math.pow(1024, i);
+        return `${val >= 100 || i === 0 ? val.toFixed(0) : val.toFixed(1)} ${units[i]}`;
+      }
+
+      function formatDuration(ms) {
+        if (!ms || ms < 0) return '';
+        if (ms < 1000) return `${Math.round(ms)} ms`;
+        return `${(ms / 1000).toFixed(1)} วิ`;
+      }
+
+      function getExtensionForMime(mime) {
+        if (mime === 'image/png') return 'png';
+        if (mime === 'image/webp') return 'webp';
+        return 'jpg';
+      }
+
+      function buildOutputName(originalName, mime, prefix) {
+        const cleanPrefix = (prefix || '').replace(/[\\/:*?"<>|]/g, '').trim();
+        const base = originalName.replace(/\.[^/.]+$/, '');
+        const ext = getExtensionForMime(mime);
+        return `${cleanPrefix}${base}.${ext}`;
+      }
+
+      function isHeicLikeFile(file) {
+        const name = (file.name || '').toLowerCase();
+        const type = (file.type || '').toLowerCase();
+        return name.endsWith('.heic') || name.endsWith('.heif') || type.includes('heic') || type.includes('heif');
+      }
+
+      function isSupportedImageFile(file) {
+        if (isHeicLikeFile(file)) return true;
+        const type = (file.type || '').toLowerCase();
+        const name = (file.name || '').toLowerCase();
+        return type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif|avif)$/i.test(name);
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function showToast(message, type = 'info') {
+        const colors = {
+          info: 'bg-slate-900 text-white border-slate-800',
+          success: 'bg-emerald-600 text-white border-emerald-500',
+          error: 'bg-rose-600 text-white border-rose-500',
+          warning: 'bg-amber-600 text-white border-amber-500'
+        };
+        const toast = document.createElement('div');
+        toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-lg border text-sm font-medium flex items-center justify-between gap-3 fade-in ${colors[type] || colors.info}`;
+        toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+        els.toastContainer.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 0.25s ease';
+          setTimeout(() => toast.remove(), 260);
+        }, 3200);
+      }
+
+      function triggerDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+      }
+
+      function refreshIcons() {
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+          window.lucide.createIcons();
+        }
+      }
+
+      // --- Engine Check ---
+      function updateEngineBadge() {
+        const hasHeicTo = typeof window.HeicTo === 'function';
+        const hasHeic2Any = typeof window.heic2any === 'function';
+        if (hasHeicTo) {
+          els.engineBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> libheif พร้อมใช้`;
+        } else if (hasHeic2Any) {
+          els.engineBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> heic2any พร้อมใช้`;
+        } else {
+          els.engineBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500"></span> โหมดพื้นฐาน`;
+        }
+      }
+
+      // --- Image Decode + Optional Resize via Canvas ---
+      async function decodeAndResizeBlob(blob, targetMime, quality, maxDim) {
+        const url = URL.createObjectURL(blob);
+        try {
+          const img = await new Promise((resolve, reject) => {
+            const image = new Image();
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error('ไม่สามารถอ่านข้อมูลภาพได้'));
+            image.src = url;
+          });
+
+          const origW = img.naturalWidth || img.width;
+          const origH = img.naturalHeight || img.height;
+          let targetW = origW;
+          let targetH = origH;
+
+          if (maxDim > 0 && Math.max(origW, origH) > maxDim) {
+            if (origW >= origH) {
+              targetW = maxDim;
+              targetH = Math.max(1, Math.round((origH * maxDim) / origW));
+            } else {
+              targetH = maxDim;
+              targetW = Math.max(1, Math.round((origW * maxDim) / origH));
+            }
+          }
+
+          // If no resize needed and blob already matches targetMime, just return dimensions + blob
+          if (targetW === origW && targetH === origH && blob.type === targetMime) {
+            return { blob, width: origW, height: origH };
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (targetMime === 'image/jpeg') {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, targetW, targetH);
+          }
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          const outBlob = await new Promise((resolve, reject) => {
+            canvas.toBlob(
+              (b) => (b ? resolve(b) : reject(new Error('สร้างไฟล์ภาพปลายทางไม่สำเร็จ'))),
+              targetMime,
+              targetMime === 'image/png' ? undefined : quality
+            );
+          });
+
+          return { blob: outBlob, width: targetW, height: targetH };
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      async function convertSingleFile(file, options) {
+        const { targetMime, quality, maxDim } = options;
+        let decodedBlob = null;
+        let engineUsed = 'native';
+
+        const looksHeic = isHeicLikeFile(file);
+        const convertMime = maxDim > 0 ? 'image/jpeg' : targetMime;
+        const convertQuality = maxDim > 0 ? Math.max(quality, 0.92) : quality;
+
+        if (looksHeic) {
+          // 1. Primary: HeicTo (libheif 1.23+, supports modern iOS HEIC)
+          if (typeof window.HeicTo === 'function') {
+            try {
+              const heicToType = convertMime === 'image/png' ? 'image/png' : 'image/jpeg';
+              decodedBlob = await window.HeicTo({
+                blob: file,
+                type: heicToType,
+                quality: convertQuality
+              });
+              engineUsed = 'libheif';
+            } catch (errPrimary) {
+              decodedBlob = null;
+            }
+          }
+
+          // 2. Fallback: heic2any
+          if (!decodedBlob && typeof window.heic2any === 'function') {
+            try {
+              const res = await window.heic2any({
+                blob: file,
+                toType: convertMime === 'image/png' ? 'image/png' : 'image/jpeg',
+                quality: convertQuality
+              });
+              decodedBlob = Array.isArray(res) ? res[0] : res;
+              engineUsed = 'heic2any';
+            } catch (errFallback) {
+              decodedBlob = null;
+            }
+          }
+
+          // 3. Last resort: native browser decode (e.g., Safari or misnamed JPG with .heic extension)
+          if (!decodedBlob) {
+            decodedBlob = file;
+            engineUsed = 'native';
+          }
+        } else {
+          decodedBlob = file;
+          engineUsed = 'native';
+        }
+
+        const finalResult = await decodeAndResizeBlob(decodedBlob, targetMime, quality, maxDim);
+        return {
+          blob: finalResult.blob,
+          width: finalResult.width,
+          height: finalResult.height,
+          engineUsed
+        };
+      }
+
+      // --- Queue & Worker Pool ---
+      function addFiles(fileList) {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        for (const file of files) {
+          if (!isSupportedImageFile(file)) {
+            skippedCount++;
+            continue;
+          }
+          // Avoid exact duplicate file name + size + lastModified already in list
+          const isDup = state.items.some(
+            (it) => it.file.name === file.name && it.file.size === file.size && it.file.lastModified === file.lastModified
+          );
+          if (isDup) continue;
+
+          state.items.push({
+            id: state.nextId++,
+            file,
+            name: file.name,
+            originalSize: file.size,
+            status: 'pending',
+            outputBlob: null,
+            outputUrl: null,
+            outputName: buildOutputName(file.name, els.formatSelect.value, els.prefixInput.value),
+            outputSize: 0,
+            width: 0,
+            height: 0,
+            durationMs: 0,
+            errorMsg: '',
+            engineUsed: ''
+          });
+          addedCount++;
+        }
+
+        if (addedCount > 0) {
+          showToast(`เพิ่มแล้ว ${addedCount} ไฟล์${skippedCount > 0 ? ` (ข้ามไฟล์ที่ไม่ใช่รูป ${skippedCount} ไฟล์)` : ''}`, 'info');
+          render();
+          if (els.autoConvertToggle.checked) {
+            startBatchConversion();
+          }
+        } else if (skippedCount > 0) {
+          showToast('ไม่พบไฟล์รูปภาพหรือไฟล์ HEIC ที่รองรับ', 'warning');
+        }
+      }
+
+      async function startBatchConversion() {
+        const pendingItems = state.items.filter((it) => it.status === 'pending');
+        if (!pendingItems.length) return;
+        if (state.isRunning) return;
+
+        state.isRunning = true;
+        render();
+
+        const concurrency = Math.max(1, Math.min(6, parseInt(els.concurrencySelect.value, 10) || 3));
+        const options = {
+          targetMime: els.formatSelect.value,
+          quality: Math.max(0.5, Math.min(1, parseInt(els.qualitySlider.value, 10) / 100)),
+          maxDim: parseInt(els.resizeSelect.value, 10) || 0,
+          prefix: els.prefixInput.value
+        };
+
+        let cursor = 0;
+        const batchStart = performance.now();
+
+        async function worker() {
+          while (true) {
+            const nextItem = state.items.find((it) => it.status === 'pending');
+            if (!nextItem) break;
+
+            nextItem.status = 'converting';
+            nextItem.errorMsg = '';
+            nextItem.outputName = buildOutputName(nextItem.name, options.targetMime, options.prefix);
+            render();
+
+            const t0 = performance.now();
+            try {
+              const result = await convertSingleFile(nextItem.file, options);
+              if (nextItem.outputUrl) {
+                URL.revokeObjectURL(nextItem.outputUrl);
+              }
+              nextItem.outputBlob = result.blob;
+              nextItem.outputUrl = URL.createObjectURL(result.blob);
+              nextItem.outputSize = result.blob.size;
+              nextItem.width = result.width;
+              nextItem.height = result.height;
+              nextItem.durationMs = performance.now() - t0;
+              nextItem.engineUsed = result.engineUsed;
+              nextItem.status = 'done';
+            } catch (err) {
+              nextItem.status = 'error';
+              nextItem.errorMsg = err && err.message ? err.message : 'ไม่สามารถแปลงไฟล์นี้ได้';
+              nextItem.durationMs = performance.now() - t0;
+            }
+            cursor++;
+            render();
+          }
+        }
+
+        const workers = Array.from({ length: concurrency }, () => worker());
+        await Promise.all(workers);
+
+        state.isRunning = false;
+        render();
+
+        const totalElapsed = performance.now() - batchStart;
+        const doneNow = state.items.filter((it) => it.status === 'done').length;
+        const errNow = state.items.filter((it) => it.status === 'error').length;
+        if (cursor > 0) {
+          if (errNow === 0) {
+            showToast(`แปลงสำเร็จครบ ${doneNow} ไฟล์ ใน ${formatDuration(totalElapsed)}`, 'success');
+          } else {
+            showToast(`เสร็จสิ้น: สำเร็จ ${doneNow} ไฟล์, ผิดพลาด ${errNow} ไฟล์`, 'warning');
+          }
+        }
+      }
+
+      async function retryItem(id) {
+        const item = state.items.find((it) => it.id === id);
+        if (!item) return;
+        item.status = 'pending';
+        item.errorMsg = '';
+        render();
+        startBatchConversion();
+      }
+
+      function removeItem(id) {
+        const idx = state.items.findIndex((it) => it.id === id);
+        if (idx === -1) return;
+        const [removed] = state.items.splice(idx, 1);
+        if (removed.outputUrl) {
+          URL.revokeObjectURL(removed.outputUrl);
+        }
+        if (state.previewItemId === id) {
+          closePreviewModal();
+        }
+        render();
+      }
+
+      function clearAllItems() {
+        for (const item of state.items) {
+          if (item.outputUrl) {
+            URL.revokeObjectURL(item.outputUrl);
+          }
+        }
+        state.items = [];
+        state.isRunning = false;
+        closePreviewModal();
+        render();
+        showToast('ล้างรายการทั้งหมดแล้ว', 'info');
+      }
+
+      function reconvertAll() {
+        if (!state.items.length || state.isRunning) return;
+        for (const item of state.items) {
+          if (item.outputUrl) {
+            URL.revokeObjectURL(item.outputUrl);
+            item.outputUrl = null;
+          }
+          item.outputBlob = null;
+          item.outputSize = 0;
+          item.status = 'pending';
+          item.errorMsg = '';
+        }
+        render();
+        startBatchConversion();
+      }
+
+      async function downloadAllAsZip() {
+        const doneItems = state.items.filter((it) => it.status === 'done' && it.outputBlob);
+        if (!doneItems.length || state.isZipping) return;
+
+        if (typeof window.JSZip !== 'function') {
+          showToast('ไม่พบไลบรารี ZIP กำลังโหลดแยกทีละไฟล์แทน', 'warning');
+          downloadAllIndividually();
+          return;
+        }
+
+        state.isZipping = true;
+        els.downloadZipBtn.disabled = true;
+        const originalText = els.downloadZipBtn.innerHTML;
+        els.downloadZipBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> กำลังรวมไฟล์ ZIP...`;
+        refreshIcons();
+
+        try {
+          const zip = new window.JSZip();
+          const usedNames = new Map();
+
+          for (const item of doneItems) {
+            let fname = item.outputName;
+            if (usedNames.has(fname.toLowerCase())) {
+              const count = usedNames.get(fname.toLowerCase()) + 1;
+              usedNames.set(fname.toLowerCase(), count);
+              const dotIdx = fname.lastIndexOf('.');
+              fname = dotIdx > 0
+                ? `${fname.slice(0, dotIdx)}_${count}${fname.slice(dotIdx)}`
+                : `${fname}_${count}`;
+            } else {
+              usedNames.set(fname.toLowerCase(), 1);
+            }
+            zip.file(fname, item.outputBlob);
+          }
+
+          const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+          const now = new Date();
+          const pad = (n) => String(n).padStart(2, '0');
+          const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+          triggerDownload(zipBlob, `converted_images_${stamp}.zip`);
+          showToast(`ดาวน์โหลด ZIP (${doneItems.length} ไฟล์) เรียบร้อย`, 'success');
+        } catch (err) {
+          showToast('สร้างไฟล์ ZIP ไม่สำเร็จ กรุณาลองโหลดแยกทีละไฟล์', 'error');
+        } finally {
+          state.isZipping = false;
+          els.downloadZipBtn.innerHTML = originalText;
+          render();
+        }
+      }
+
+      async function downloadAllIndividually() {
+        const doneItems = state.items.filter((it) => it.status === 'done' && it.outputBlob);
+        if (!doneItems.length) return;
+        showToast(`กำลังเริ่มดาวน์โหลด ${doneItems.length} ไฟล์...`, 'info');
+        for (let i = 0; i < doneItems.length; i++) {
+          triggerDownload(doneItems[i].outputBlob, doneItems[i].outputName);
+          if (i < doneItems.length - 1) {
+            await new Promise((r) => setTimeout(r, 180));
+          }
+        }
+      }
+
+      // --- Preview Modal ---
+      function openPreviewModal(id) {
+        const item = state.items.find((it) => it.id === id && it.status === 'done' && it.outputUrl);
+        if (!item) return;
+        state.previewItemId = id;
+        els.previewImg.src = item.outputUrl;
+        els.previewTitle.textContent = item.outputName;
+        els.previewMeta.textContent = `${item.width} × ${item.height} px • ${formatBytes(item.originalSize)} → ${formatBytes(item.outputSize)} (${formatDuration(item.durationMs)})`;
+        els.previewModal.classList.remove('hidden');
+        els.previewModal.classList.add('flex');
+      }
+
+      function closePreviewModal() {
+        state.previewItemId = null;
+        els.previewModal.classList.add('hidden');
+        els.previewModal.classList.remove('flex');
+        els.previewImg.src = '';
+      }
+
+      // --- Render ---
+      function render() {
+        const total = state.items.length;
+        const done = state.items.filter((it) => it.status === 'done').length;
+        const converting = state.items.filter((it) => it.status === 'converting').length;
+        const pending = state.items.filter((it) => it.status === 'pending').length;
+        const errors = state.items.filter((it) => it.status === 'error').length;
+
+        const hasItems = total > 0;
+        els.statsBar.classList.toggle('hidden', !hasItems);
+        els.fileListSection.classList.toggle('hidden', !hasItems);
+        els.emptyGuide.classList.toggle('hidden', hasItems);
+
+        // Stats
+        els.statTotal.textContent = String(total);
+        els.statDone.textContent = String(done);
+        els.statProcessing.textContent = String(converting + pending);
+        els.statError.textContent = String(errors);
+        els.statErrorWrap.classList.toggle('hidden', errors === 0);
+        els.statErrorWrap.classList.toggle('flex', errors > 0);
+
+        const totalOrigBytes = state.items.reduce((acc, it) => acc + (it.originalSize || 0), 0);
+        const totalOutBytes = state.items.reduce((acc, it) => acc + (it.outputSize || 0), 0);
+        els.statSizeSummary.textContent = done > 0
+          ? `${formatBytes(totalOrigBytes)} → ${formatBytes(totalOutBytes)}`
+          : formatBytes(totalOrigBytes);
+
+        // Progress
+        const finished = done + errors;
+        const pct = total > 0 ? Math.round((finished / total) * 100) : 0;
+        els.overallProgressBar.style.width = `${pct}%`;
+        els.progressPercentText.textContent = `${pct}%`;
+        if (converting > 0) {
+          els.progressStatusText.textContent = `กำลังแปลงไฟล์... (${finished}/${total} ไฟล์)`;
+        } else if (pending > 0) {
+          els.progressStatusText.textContent = `รอเริ่มแปลง ${pending} ไฟล์`;
+        } else if (total > 0 && errors === 0) {
+          els.progressStatusText.textContent = `แปลงครบทุกไฟล์เรียบร้อยแล้ว (${done} ไฟล์)`;
+        } else if (total > 0) {
+          els.progressStatusText.textContent = `เสร็จสิ้น: สำเร็จ ${done} ไฟล์, ผิดพลาด ${errors} ไฟล์`;
+        }
+
+        // Buttons
+        els.convertAllBtn.disabled = pending === 0 || state.isRunning;
+        els.downloadZipBtn.disabled = done === 0 || state.isZipping;
+        els.downloadIndivBtn.disabled = done === 0;
+        els.reconvertBtn.disabled = !hasItems || state.isRunning;
+
+        // Filter tabs active styling
+        document.querySelectorAll('.filter-tab').forEach((btn) => {
+          const active = btn.dataset.filter === state.filter;
+          btn.className = active
+            ? 'filter-tab px-3 py-1 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm transition'
+            : 'filter-tab px-3 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+        });
+
+        // View mode buttons
+        els.viewGridBtn.className = state.viewMode === 'grid'
+          ? 'p-1.5 rounded-lg bg-white text-blue-600 shadow-sm transition'
+          : 'p-1.5 rounded-lg text-slate-500 hover:text-slate-800 transition';
+        els.viewListBtn.className = state.viewMode === 'list'
+          ? 'p-1.5 rounded-lg bg-white text-blue-600 shadow-sm transition'
+          : 'p-1.5 rounded-lg text-slate-500 hover:text-slate-800 transition';
+
+        // Filtered items
+        const filtered = state.items.filter((it) => {
+          if (state.filter === 'done') return it.status === 'done';
+          if (state.filter === 'pending') return it.status === 'pending' || it.status === 'converting';
+          if (state.filter === 'error') return it.status === 'error';
+          return true;
+        });
+
+        els.emptyFilterState.classList.toggle('hidden', !hasItems || filtered.length > 0);
+        els.fileGrid.className = state.viewMode === 'grid'
+          ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5'
+          : 'flex flex-col gap-2.5';
+
+        els.fileGrid.innerHTML = filtered.map((item) => renderItemCard(item, state.viewMode)).join('');
+        refreshIcons();
+      }
+
+      function renderStatusBadge(item) {
+        if (item.status === 'done') {
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+            <i data-lucide="check-circle-2" class="w-3 h-3"></i> สำเร็จ
+          </span>`;
+        }
+        if (item.status === 'converting') {
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+            <i data-lucide="loader-2" class="w-3 h-3 animate-spin"></i> กำลังแปลง
+          </span>`;
+        }
+        if (item.status === 'error') {
+          return `<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+            <i data-lucide="alert-circle" class="w-3 h-3"></i> ผิดพลาด
+          </span>`;
+        }
+        return `<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
+          <i data-lucide="clock" class="w-3 h-3"></i> รอคิว
+        </span>`;
+      }
+
+      function renderItemCard(item, viewMode) {
+        const safeName = escapeHtml(item.status === 'done' ? item.outputName : item.name);
+        const origMeta = formatBytes(item.originalSize);
+        const outMeta = item.status === 'done'
+          ? `${origMeta} → <span class="font-semibold text-slate-800">${formatBytes(item.outputSize)}</span>`
+          : origMeta;
+        const dimMeta = item.width > 0 ? `${item.width}×${item.height}` : '';
+        const timeMeta = item.durationMs > 0 ? formatDuration(item.durationMs) : '';
+
+        if (viewMode === 'list') {
+          return `
+            <div class="bg-white rounded-xl border border-slate-200/90 p-3 flex items-center gap-3 shadow-sm hover:border-slate-300 transition" data-item-id="${item.id}">
+              <div class="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden flex items-center justify-center shrink-0 ${item.status === 'done' ? 'cursor-pointer' : ''}" data-action="${item.status === 'done' ? 'preview' : ''}">
+                ${item.outputUrl
+                  ? `<img src="${item.outputUrl}" alt="${safeName}" class="w-full h-full object-cover" />`
+                  : `<i data-lucide="${item.status === 'converting' ? 'loader-2' : 'image'}" class="w-5 h-5 text-slate-400 ${item.status === 'converting' ? 'animate-spin text-blue-500' : ''}"></i>`}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <p class="text-sm font-semibold text-slate-900 truncate" title="${safeName}">${safeName}</p>
+                  ${renderStatusBadge(item)}
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5 truncate">
+                  ${item.status === 'error'
+                    ? `<span class="text-rose-600">${escapeHtml(item.errorMsg)}</span>`
+                    : `${outMeta}${dimMeta ? ` • ${dimMeta}` : ''}${timeMeta ? ` • ${timeMeta}` : ''}`}
+                </p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                ${item.status === 'done' ? `
+                  <button type="button" data-action="preview" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition" title="ดูภาพขนาดเต็ม">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                  <button type="button" data-action="download" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i> โหลด
+                  </button>
+                ` : ''}
+                ${item.status === 'error' ? `
+                  <button type="button" data-action="retry" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ลองใหม่
+                  </button>
+                ` : ''}
+                <button type="button" data-action="remove" class="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition" title="ลบออกจากรายการ">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+          `;
+        }
+
+        // Grid card view
+        return `
+          <div class="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-md hover:border-slate-300 transition flex flex-col" data-item-id="${item.id}">
+            <div class="relative aspect-[16/10] bg-slate-100 flex items-center justify-center overflow-hidden ${item.status === 'done' ? 'cursor-pointer group' : ''}" data-action="${item.status === 'done' ? 'preview' : ''}">
+              ${item.outputUrl
+                ? `<img src="${item.outputUrl}" alt="${safeName}" class="w-full h-full object-cover group-hover:scale-[1.03] transition duration-300" />
+                   <div class="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/20 transition flex items-center justify-center">
+                     <span class="opacity-0 group-hover:opacity-100 transition bg-white/95 text-slate-900 text-xs font-semibold px-2.5 py-1 rounded-full shadow flex items-center gap-1">
+                       <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> ดูภาพใหญ่
+                     </span>
+                   </div>`
+                : `<div class="text-center p-4">
+                     <i data-lucide="${item.status === 'converting' ? 'loader-2' : item.status === 'error' ? 'alert-triangle' : 'file-image'}"
+                        class="w-8 h-8 mx-auto ${item.status === 'converting' ? 'text-blue-500 animate-spin' : item.status === 'error' ? 'text-rose-400' : 'text-slate-300'}"></i>
+                     <p class="text-xs text-slate-400 mt-1.5">${item.status === 'converting' ? 'กำลังแปลงไฟล์...' : item.status === 'error' ? 'แปลงไม่สำเร็จ' : 'รอแปลงไฟล์'}</p>
+                   </div>`}
+              <div class="absolute top-2.5 left-2.5">
+                ${renderStatusBadge(item)}
+              </div>
+              <button type="button" data-action="remove" aria-label="ลบไฟล์นี้"
+                      class="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/90 hover:bg-rose-500 text-slate-600 hover:text-white shadow-sm flex items-center justify-center transition">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            <div class="p-3.5 flex-1 flex flex-col justify-between gap-2.5">
+              <div class="min-w-0">
+                <p class="text-sm font-bold text-slate-900 truncate" title="${safeName}">${safeName}</p>
+                <p class="text-xs text-slate-500 mt-0.5 truncate">
+                  ${item.status === 'error'
+                    ? `<span class="text-rose-600">${escapeHtml(item.errorMsg)}</span>`
+                    : `${outMeta}${dimMeta ? ` • ${dimMeta}` : ''}`}
+                </p>
+              </div>
+              <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                <span class="text-[11px] text-slate-400">${timeMeta ? `ใช้เวลา ${timeMeta}` : 'HEIC/HEIF'}</span>
+                ${item.status === 'done' ? `
+                  <button type="button" data-action="download"
+                          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i> ดาวน์โหลด
+                  </button>
+                ` : item.status === 'error' ? `
+                  <button type="button" data-action="retry"
+                          class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold transition">
+                    <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ลองใหม่
+                  </button>
+                ` : `<span class="text-[11px] font-medium text-slate-400">${item.status === 'converting' ? 'กำลังทำงาน...' : 'อยู่ในคิว'}</span>`}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      // --- Event Listeners ---
+      els.selectFilesBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        els.fileInput.value = '';
+        els.fileInput.click();
+      });
+
+      els.selectFolderBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        els.folderInput.value = '';
+        els.folderInput.click();
+      });
+
+      els.dropZone.addEventListener('click', () => {
+        els.fileInput.value = '';
+        els.fileInput.click();
+      });
+
+      els.dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          els.fileInput.value = '';
+          els.fileInput.click();
+        }
+      });
+
+      els.fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+      els.folderInput.addEventListener('change', (e) => addFiles(e.target.files));
+
+      // Drag and drop on dropzone + entire window
+      let dragCounter = 0;
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        els.globalDropOverlay.classList.remove('hidden');
+        els.globalDropOverlay.classList.add('flex');
+        els.dropZone.classList.add('drop-active');
+      });
+
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter = Math.max(0, dragCounter - 1);
+        if (dragCounter === 0) {
+          els.globalDropOverlay.classList.add('hidden');
+          els.globalDropOverlay.classList.remove('flex');
+          els.dropZone.classList.remove('drop-active');
+        }
+      });
+
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        els.globalDropOverlay.classList.add('hidden');
+        els.globalDropOverlay.classList.remove('flex');
+        els.dropZone.classList.remove('drop-active');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          addFiles(e.dataTransfer.files);
+        }
+      });
+
+      // Settings interactions
+      function syncQualityUI(val) {
+        els.qualitySlider.value = String(val);
+        els.qualityValue.textContent = `${val}%`;
+        document.querySelectorAll('.quality-preset').forEach((btn) => {
+          const isMatch = parseInt(btn.dataset.quality, 10) === parseInt(val, 10);
+          btn.className = isMatch
+            ? 'quality-preset flex-1 text-xs py-1 rounded-lg border border-blue-500 bg-blue-50 text-blue-700 font-semibold transition'
+            : 'quality-preset flex-1 text-xs py-1 rounded-lg border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 font-medium transition';
+        });
+      }
+
+      els.qualitySlider.addEventListener('input', (e) => syncQualityUI(e.target.value));
+      document.querySelectorAll('.quality-preset').forEach((btn) => {
+        btn.addEventListener('click', () => syncQualityUI(btn.dataset.quality));
+      });
+
+      els.formatSelect.addEventListener('change', () => {
+        const isPng = els.formatSelect.value === 'image/png';
+        els.qualityGroup.classList.toggle('opacity-45', isPng);
+        els.qualityGroup.classList.toggle('pointer-events-none', isPng);
+      });
+
+      // Main action buttons
+      els.convertAllBtn.addEventListener('click', () => startBatchConversion());
+      els.downloadZipBtn.addEventListener('click', () => downloadAllAsZip());
+      els.downloadIndivBtn.addEventListener('click', () => downloadAllIndividually());
+      els.reconvertBtn.addEventListener('click', () => reconvertAll());
+      els.clearAllBtn.addEventListener('click', () => clearAllItems());
+
+      // Filter tabs & View switch
+      document.querySelectorAll('.filter-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.filter = btn.dataset.filter;
+          render();
+        });
+      });
+
+      els.viewGridBtn.addEventListener('click', () => {
+        state.viewMode = 'grid';
+        render();
+      });
+
+      els.viewListBtn.addEventListener('click', () => {
+        state.viewMode = 'list';
+        render();
+      });
+
+      // Delegated events on file list
+      els.fileGrid.addEventListener('click', (e) => {
+        const actionEl = e.target.closest('[data-action]');
+        if (!actionEl) return;
+        const action = actionEl.dataset.action;
+        if (!action) return;
+        const card = actionEl.closest('[data-item-id]');
+        if (!card) return;
+        const id = parseInt(card.dataset.itemId, 10);
+
+        if (action === 'remove') {
+          e.stopPropagation();
+          removeItem(id);
+        } else if (action === 'download') {
+          e.stopPropagation();
+          const item = state.items.find((it) => it.id === id);
+          if (item && item.outputBlob) {
+            triggerDownload(item.outputBlob, item.outputName);
+          }
+        } else if (action === 'retry') {
+          e.stopPropagation();
+          retryItem(id);
+        } else if (action === 'preview') {
+          openPreviewModal(id);
+        }
+      });
+
+      // Preview modal listeners
+      els.closePreviewBtn.addEventListener('click', closePreviewModal);
+      els.previewModal.addEventListener('click', (e) => {
+        if (e.target === els.previewModal) closePreviewModal();
+      });
+      els.previewDownloadBtn.addEventListener('click', () => {
+        const item = state.items.find((it) => it.id === state.previewItemId);
+        if (item && item.outputBlob) {
+          triggerDownload(item.outputBlob, item.outputName);
+        }
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && state.previewItemId !== null) {
+          closePreviewModal();
+        }
+      });
+
+      // --- Google Drive Integration ---
+      const DRIVE_STORAGE_KEY = 'heic_batch_gdrive_cfg_v1';
+      const driveState = {
+        activeTab: 'links',
+        isFetching: false,
+        accessToken: null
+      };
+
+      function loadDriveConfig() {
+        try {
+          const raw = localStorage.getItem(DRIVE_STORAGE_KEY);
+          if (!raw) return;
+          const cfg = JSON.parse(raw);
+          if (cfg.apiKey) {
+            els.driveApiKeyInput.value = cfg.apiKey;
+            els.drivePickerApiKeyInput.value = cfg.apiKey;
+          }
+          if (cfg.clientId) {
+            els.driveClientIdInput.value = cfg.clientId;
+          }
+        } catch (err) {
+          // Ignore storage errors in restricted environments
+        }
+      }
+
+      function saveDriveConfig(apiKey, clientId) {
+        try {
+          localStorage.setItem(DRIVE_STORAGE_KEY, JSON.stringify({
+            apiKey: apiKey || '',
+            clientId: clientId || ''
+          }));
+        } catch (err) {
+          // Ignore storage errors
+        }
+      }
+
+      function setDriveStatus(type, text, countText = '', progressPct = null) {
+        const styles = {
+          info: 'bg-blue-50 border-blue-200 text-blue-800',
+          success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+          error: 'bg-rose-50 border-rose-200 text-rose-700',
+          warning: 'bg-amber-50 border-amber-200 text-amber-800'
+        };
+        els.driveStatusBox.className = `rounded-xl border p-3 text-xs space-y-1.5 ${styles[type] || styles.info}`;
+        els.driveStatusText.textContent = text;
+        els.driveStatusCount.textContent = countText;
+        if (progressPct !== null) {
+          els.driveProgressWrap.classList.remove('hidden');
+          els.driveProgressBar.style.width = `${Math.max(0, Math.min(100, progressPct))}%`;
+        } else {
+          els.driveProgressWrap.classList.add('hidden');
+        }
+      }
+
+      function clearDriveStatus() {
+        els.driveStatusBox.classList.add('hidden');
+      }
+
+      function openDriveModal() {
+        clearDriveStatus();
+        els.driveModal.classList.remove('hidden');
+        els.driveModal.classList.add('flex');
+        refreshIcons();
+      }
+
+      function closeDriveModal() {
+        els.driveModal.classList.add('hidden');
+        els.driveModal.classList.remove('flex');
+      }
+
+      function switchDriveTab(tab) {
+        driveState.activeTab = tab;
+        const isLinks = tab === 'links';
+        els.driveTabLinks.classList.toggle('hidden', !isLinks);
+        els.driveTabPicker.classList.toggle('hidden', isLinks);
+        els.driveTabLinksBtn.className = isLinks
+          ? 'drive-tab-btn py-2 px-3 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm transition flex items-center justify-center gap-1.5'
+          : 'drive-tab-btn py-2 px-3 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5';
+        els.driveTabPickerBtn.className = !isLinks
+          ? 'drive-tab-btn py-2 px-3 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm transition flex items-center justify-center gap-1.5'
+          : 'drive-tab-btn py-2 px-3 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-1.5';
+        clearDriveStatus();
+      }
+
+      function parseDriveUrlEntry(rawLine) {
+        const line = rawLine.trim();
+        if (!line) return null;
+        const folderMatch = line.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+        if (folderMatch) return { type: 'folder', id: folderMatch[1] };
+
+        const fileMatch = line.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/)
+          || line.match(/[?&]id=([a-zA-Z0-9_-]{10,})/)
+          || line.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+        if (fileMatch) return { type: 'file', id: fileMatch[1] };
+
+        if (/^[a-zA-Z0-9_-]{20,}$/.test(line)) {
+          return { type: 'file', id: line };
+        }
+        return null;
+      }
+
+      async function fetchDriveFolderFiles(folderId, authHeaders, apiKey) {
+        const files = [];
+        let pageToken = '';
+        do {
+          const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+          const fields = encodeURIComponent('nextPageToken,files(id,name,mimeType,size)');
+          const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
+          const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+          const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=100${keyParam}${tokenParam}`;
+          const res = await fetch(url, { headers: authHeaders });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error((errData.error && errData.error.message) || `ไม่สามารถอ่านโฟลเดอร์ได้ (HTTP ${res.status})`);
+          }
+          const data = await res.json();
+          if (Array.isArray(data.files)) {
+            for (const f of data.files) {
+              const nameLower = (f.name || '').toLowerCase();
+              const mimeLower = (f.mimeType || '').toLowerCase();
+              if (nameLower.endsWith('.heic') || nameLower.endsWith('.heif') || mimeLower.startsWith('image/')) {
+                files.push(f);
+              }
+            }
+          }
+          pageToken = data.nextPageToken || '';
+        } while (pageToken);
+        return files;
+      }
+
+      async function fetchDriveFileMetadata(fileId, authHeaders, apiKey) {
+        const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
+        const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size${keyParam}`;
+        const res = await fetch(url, { headers: authHeaders });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error((errData.error && errData.error.message) || `ไม่สามารถเข้าถึงไฟล์ได้ (HTTP ${res.status})`);
+        }
+        return res.json();
+      }
+
+      async function downloadDriveFileAsFileObject(meta, authHeaders, apiKey) {
+        const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
+        const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(meta.id)}?alt=media${keyParam}`;
+        const res = await fetch(url, { headers: authHeaders });
+        if (!res.ok) {
+          throw new Error(`ดาวน์โหลด ${meta.name || meta.id} ไม่สำเร็จ (HTTP ${res.status})`);
+        }
+        const blob = await res.blob();
+        const filename = meta.name || `drive_${meta.id}.heic`;
+        const mime = meta.mimeType || blob.type || 'image/heic';
+        return new File([blob], filename, { type: mime, lastModified: Date.now() });
+      }
+
+      async function importDriveFileMetas(metas, authHeaders, apiKey) {
+        if (!metas.length) {
+          setDriveStatus('warning', 'ไม่พบไฟล์ HEIC หรือไฟล์รูปภาพในลิงก์ที่ระบุ');
+          return;
+        }
+        const downloadedFiles = [];
+        let failedCount = 0;
+
+        for (let i = 0; i < metas.length; i++) {
+          const meta = metas[i];
+          const pct = Math.round(((i + 1) / metas.length) * 100);
+          setDriveStatus('info', `กำลังดาวน์โหลด: ${meta.name || meta.id}`, `${i + 1}/${metas.length}`, pct);
+          try {
+            const fileObj = await downloadDriveFileAsFileObject(meta, authHeaders, apiKey);
+            downloadedFiles.push(fileObj);
+          } catch (err) {
+            failedCount++;
+          }
+        }
+
+        if (downloadedFiles.length > 0) {
+          addFiles(downloadedFiles);
+          setDriveStatus(
+            failedCount > 0 ? 'warning' : 'success',
+            `นำเข้าสำเร็จ ${downloadedFiles.length} ไฟล์${failedCount > 0 ? ` (ข้ามที่โหลดไม่ได้ ${failedCount} ไฟล์)` : ''}`,
+            'เสร็จสิ้น',
+            100
+          );
+          setTimeout(() => closeDriveModal(), 900);
+        } else {
+          setDriveStatus('error', 'ไม่สามารถดาวน์โหลดไฟล์จาก Google Drive ได้ กรุณาตรวจสอบสิทธิ์การแชร์หรือ API Key');
+        }
+      }
+
+      async function handleFetchDriveLinks() {
+        if (driveState.isFetching) return;
+        const rawText = els.driveLinksInput.value.trim();
+        const apiKey = els.driveApiKeyInput.value.trim();
+
+        if (!rawText) {
+          setDriveStatus('warning', 'กรุณาวางลิงก์ไฟล์หรือโฟลเดอร์ Google Drive อย่างน้อย 1 ลิงก์');
+          return;
+        }
+        if (!apiKey) {
+          setDriveStatus('warning', 'กรุณากรอก Google Drive API Key เพื่อดึงไฟล์จากลิงก์แชร์');
+          return;
+        }
+
+        const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const entries = lines.map(parseDriveUrlEntry).filter(Boolean);
+        if (!entries.length) {
+          setDriveStatus('error', 'ไม่พบรูปแบบลิงก์ Google Drive ที่ถูกต้อง กรุณาตรวจสอบลิงก์อีกครั้ง');
+          return;
+        }
+
+        saveDriveConfig(apiKey, els.driveClientIdInput.value.trim());
+        els.drivePickerApiKeyInput.value = apiKey;
+
+        driveState.isFetching = true;
+        els.driveFetchLinksBtn.disabled = true;
+        setDriveStatus('info', 'กำลังตรวจสอบรายชื่อไฟล์จาก Google Drive...', `0/${entries.length}`, 5);
+
+        try {
+          const allMetas = [];
+          const seenIds = new Set();
+
+          for (const entry of entries) {
+            if (entry.type === 'folder') {
+              const folderFiles = await fetchDriveFolderFiles(entry.id, {}, apiKey);
+              for (const f of folderFiles) {
+                if (!seenIds.has(f.id)) {
+                  seenIds.add(f.id);
+                  allMetas.push(f);
+                }
+              }
+            } else {
+              if (!seenIds.has(entry.id)) {
+                const meta = await fetchDriveFileMetadata(entry.id, {}, apiKey);
+                seenIds.add(entry.id);
+                allMetas.push(meta);
+              }
+            }
+          }
+
+          await importDriveFileMetas(allMetas, {}, apiKey);
+        } catch (err) {
+          setDriveStatus('error', err && err.message ? err.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อ Google Drive');
+        } finally {
+          driveState.isFetching = false;
+          els.driveFetchLinksBtn.disabled = false;
+        }
+      }
+
+      function loadExternalScript(src) {
+        return new Promise((resolve, reject) => {
+          const existing = document.querySelector(`script[src="${src}"]`);
+          if (existing) {
+            resolve();
+            return;
+          }
+          const s = document.createElement('script');
+          s.src = src;
+          s.async = true;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error(`ไม่สามารถโหลดสคริปต์ ${src} ได้`));
+          document.head.appendChild(s);
+        });
+      }
+
+      async function handleOpenGooglePicker() {
+        if (driveState.isFetching) return;
+        const clientId = els.driveClientIdInput.value.trim();
+        const apiKey = els.drivePickerApiKeyInput.value.trim();
+
+        if (!clientId || !apiKey) {
+          setDriveStatus('warning', 'กรุณากรอกทั้ง OAuth Client ID และ Google API Key');
+          return;
+        }
+
+        saveDriveConfig(apiKey, clientId);
+        els.driveApiKeyInput.value = apiKey;
+
+        driveState.isFetching = true;
+        els.driveOpenPickerBtn.disabled = true;
+        setDriveStatus('info', 'กำลังโหลดหน้าต่างเชื่อมต่อ Google Drive...');
+
+        try {
+          await Promise.all([
+            loadExternalScript('https://accounts.google.com/gsi/client'),
+            loadExternalScript('https://apis.google.com/js/api.js')
+          ]);
+
+          await new Promise((resolve, reject) => {
+            if (!window.gapi) {
+              reject(new Error('ไม่พบ Google API Client'));
+              return;
+            }
+            window.gapi.load('picker', { callback: resolve, onerror: () => reject(new Error('โหลด Google Picker ไม่สำเร็จ')) });
+          });
+
+          const token = await new Promise((resolve, reject) => {
+            if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+              reject(new Error('ไม่สามารถเปิดหน้าต่างลงชื่อเข้าใช้ Google ได้ในสภาพแวดล้อมนี้'));
+              return;
+            }
+            const tokenClient = window.google.accounts.oauth2.initTokenClient({
+              client_id: clientId,
+              scope: 'https://www.googleapis.com/auth/drive.readonly',
+              callback: (resp) => {
+                if (resp && resp.access_token) {
+                  resolve(resp.access_token);
+                } else {
+                  reject(new Error('ไม่ได้รับสิทธิ์เข้าถึง Google Drive หรือถูกยกเลิก'));
+                }
+              },
+              error_callback: () => reject(new Error('หน้าต่างลงชื่อเข้าใช้ถูกบล็อกหรือปิดก่อนเสร็จสิ้น'))
+            });
+            tokenClient.requestAccessToken({ prompt: driveState.accessToken ? '' : 'consent' });
+          });
+
+          driveState.accessToken = token;
+          setDriveStatus('info', 'กรุณาเลือกไฟล์ HEIC/รูปภาพในหน้าต่าง Google Drive...');
+
+          const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(false)
+            .setMimeTypes('image/heic,image/heif,image/jpeg,image/png,image/webp,application/octet-stream');
+
+          const picker = new window.google.picker.PickerBuilder()
+            .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
+            .setOAuthToken(token)
+            .setDeveloperKey(apiKey)
+            .addView(docsView)
+            .setTitle('เลือกไฟล์ HEIC หรือรูปภาพ (เลือกได้หลายไฟล์)')
+            .setCallback(async (data) => {
+              if (data.action === window.google.picker.Action.PICKED && Array.isArray(data.docs)) {
+                const metas = data.docs.map((d) => ({
+                  id: d.id,
+                  name: d.name,
+                  mimeType: d.mimeType
+                }));
+                await importDriveFileMetas(metas, { Authorization: `Bearer ${token}` }, '');
+                driveState.isFetching = false;
+                els.driveOpenPickerBtn.disabled = false;
+              } else if (data.action === window.google.picker.Action.CANCEL) {
+                clearDriveStatus();
+                driveState.isFetching = false;
+                els.driveOpenPickerBtn.disabled = false;
+              }
+            })
+            .build();
+
+          picker.setVisible(true);
+        } catch (err) {
+          setDriveStatus('error', err && err.message ? err.message : 'ไม่สามารถเปิด Google Picker ได้');
+          driveState.isFetching = false;
+          els.driveOpenPickerBtn.disabled = false;
+        }
+      }
+
+      // Drive Modal Events
+      els.openDriveModalBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDriveModal();
+      });
+      els.closeDriveModalBtn.addEventListener('click', closeDriveModal);
+      els.driveModal.addEventListener('click', (e) => {
+        if (e.target === els.driveModal) closeDriveModal();
+      });
+      els.driveTabLinksBtn.addEventListener('click', () => switchDriveTab('links'));
+      els.driveTabPickerBtn.addEventListener('click', () => switchDriveTab('picker'));
+      els.driveFetchLinksBtn.addEventListener('click', handleFetchDriveLinks);
+      els.driveOpenPickerBtn.addEventListener('click', handleOpenGooglePicker);
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !els.driveModal.classList.contains('hidden')) {
+          closeDriveModal();
+        }
+      });
+
+      // Init
+      loadDriveConfig();
+      updateEngineBadge();
+      render();
+    })();
+  </script>
+</body>
+</html>
